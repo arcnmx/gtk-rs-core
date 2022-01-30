@@ -257,6 +257,8 @@ pub mod object;
 #[macro_use]
 pub mod boxed;
 
+pub mod pointer;
+
 pub mod shared;
 
 pub mod signal;
@@ -267,6 +269,7 @@ pub mod prelude {
     pub use super::boxed::BoxedType;
     pub use super::interface::{ObjectInterface, ObjectInterfaceExt, ObjectInterfaceType};
     pub use super::object::{ObjectClassSubclassExt, ObjectImpl, ObjectImplExt};
+    pub use super::pointer::PointerType;
     pub use super::shared::{RefCounted, SharedType};
     pub use super::types::{
         ClassStruct, InstanceStruct, IsImplementable, IsSubclassable, IsSubclassableExt,
@@ -276,6 +279,7 @@ pub mod prelude {
 
 pub use self::boxed::register_boxed_type;
 pub use self::interface::register_interface;
+pub use self::pointer::register_pointer_type;
 pub use self::signal::{
     Signal, SignalClassHandlerToken, SignalId, SignalInvocationHint, SignalQuery, SignalType,
 };

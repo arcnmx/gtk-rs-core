@@ -316,9 +316,12 @@ pub type Pointer = *mut Pointee;
 /// ```
 pub type Pointee = libc::c_void;
 
-impl StaticType for ptr::NonNull<Pointee> {
+impl<T> StaticType for ptr::NonNull<T>
+where
+    *mut T: StaticType,
+{
     fn static_type() -> Type {
-        Pointer::static_type()
+        <*mut T as StaticType>::static_type()
     }
 }
 

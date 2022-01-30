@@ -51,7 +51,7 @@ use std::ptr;
 
 use crate::gstring::GString;
 use crate::translate::*;
-use crate::types::{Pointee, Pointer, StaticType, Type};
+use crate::types::{Pointer, StaticType, Type};
 
 // rustdoc-stripper-ignore-next
 /// A type that can be stored in `Value`s.
@@ -834,7 +834,10 @@ impl ValueType for Pointer {
     type Type = Self;
 }
 
-unsafe impl<'a> FromValue<'a> for Pointer {
+unsafe impl<'a, T> FromValue<'a> for *mut T
+where
+    Self: StaticType + FromGlib<ffi::gpointer>,
+{
     type Checker = GenericValueTypeChecker<Self>;
 
     unsafe fn from_value(value: &'a Value) -> Self {
@@ -842,11 +845,14 @@ unsafe impl<'a> FromValue<'a> for Pointer {
     }
 }
 
-impl ToValue for Pointer {
+impl<T: 'static, P> ToValue for *mut T
+where
+    Self: ValueType + IntoGlib<GlibType = *mut P>,
+{
     fn to_value(&self) -> Value {
         let mut value = Value::for_value_type::<Self>();
         unsafe {
-            gobject_ffi::g_value_set_pointer(&mut value.inner, self.into_glib());
+            gobject_ffi::g_value_set_pointer(&mut value.inner, self.into_glib() as ffi::gpointer);
         }
         value
     }
@@ -856,31 +862,43 @@ impl ToValue for Pointer {
     }
 }
 
-impl ValueType for ptr::NonNull<Pointee> {
-    type Type = Pointer;
+impl<T> ValueType for ptr::NonNull<T>
+where
+    *mut T: ValueType + FromGlib<ffi::gpointer>,
+{
+    type Type = <*mut T as ValueType>::Type;
 }
 
-unsafe impl<'a> FromValue<'a> for ptr::NonNull<Pointee> {
-    type Checker = GenericValueTypeOrNoneChecker<Self>;
+unsafe impl<'a, T: 'static> FromValue<'a> for ptr::NonNull<T>
+where
+    *mut T: ValueType + FromGlib<ffi::gpointer>,
+{
+    type Checker = GenericValueTypeOrNoneChecker<<Self as ValueType>::Type>;
 
     unsafe fn from_value(value: &'a Value) -> Self {
-        ptr::NonNull::new_unchecked(Pointer::from_value(value))
+        Self::new_unchecked(from_glib(Pointer::from_value(value).into_glib()))
     }
 }
 
-impl ToValue for ptr::NonNull<Pointee> {
+impl<T: 'static> ToValue for ptr::NonNull<T>
+where
+    *mut T: ValueType,
+{
     fn to_value(&self) -> Value {
         self.as_ptr().to_value()
     }
 
     fn value_type(&self) -> Type {
-        <<Self as ValueType>::Type as StaticType>::static_type()
+        <<*mut T as ValueType>::Type as StaticType>::static_type()
     }
 }
 
-impl ToValueOptional for ptr::NonNull<Pointee> {
+impl<T: 'static> ToValueOptional for ptr::NonNull<T>
+where
+    *mut T: ToValue + FromGlib<Option<Self>>,
+{
     fn to_value_optional(p: Option<&Self>) -> Value {
-        unsafe { Pointer::from_glib(p.copied()).to_value() }
+        unsafe { <*mut T>::from_glib(p.copied()).to_value() }
     }
 }
 

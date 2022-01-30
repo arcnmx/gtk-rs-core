@@ -130,7 +130,7 @@
 //!     }
 //! ```
 
-use crate::types::{Pointee, Pointer};
+use crate::types::Pointer;
 
 use libc::{c_char, size_t};
 use std::char;
@@ -362,17 +362,23 @@ impl IntoGlib for Pointer {
     }
 }
 
-impl IntoGlib for ptr::NonNull<Pointee> {
-    type GlibType = ffi::gpointer;
+impl<T> IntoGlib for ptr::NonNull<T>
+where
+    *mut T: IntoGlib,
+{
+    type GlibType = <*mut T as IntoGlib>::GlibType;
 
     #[inline]
     fn into_glib(self) -> Self::GlibType {
-        self.as_ptr()
+        self.as_ptr().into_glib()
     }
 }
 
-impl OptionIntoGlib for ptr::NonNull<Pointee> {
-    const GLIB_NONE: Self::GlibType = ptr::null_mut();
+impl<T, P> OptionIntoGlib for ptr::NonNull<T>
+where
+    *mut T: IntoGlib<GlibType = *mut P>,
+{
+    const GLIB_NONE: Self::GlibType = ptr::null_mut::<P>();
 }
 
 impl IntoGlib for Ordering {
@@ -1260,39 +1266,51 @@ impl FromGlib<ffi::gpointer> for Pointer {
     }
 }
 
-impl TryFromGlib<ffi::gpointer> for ptr::NonNull<Pointee> {
+impl<T> TryFromGlib<ffi::gpointer> for ptr::NonNull<T>
+where
+    *mut T: FromGlib<ffi::gpointer>,
+{
     type Error = GlibNoneError;
 
     unsafe fn try_from_glib(val: ffi::gpointer) -> Result<Self, Self::Error> {
-        ptr::NonNull::new(val).ok_or(GlibNoneError)
+        ptr::NonNull::new(from_glib(val)).ok_or(GlibNoneError)
     }
 }
 
-impl FromGlib<ffi::gconstpointer> for Pointer {
+impl<T, P> FromGlib<*const P> for *mut T
+where
+    Self: FromGlib<*mut P>,
+{
     #[inline]
-    unsafe fn from_glib(val: ffi::gconstpointer) -> Self {
-        val as ffi::gpointer
+    unsafe fn from_glib(val: *const P) -> Self {
+        from_glib(val as *mut P)
     }
 }
 
-impl TryFromGlib<ffi::gconstpointer> for ptr::NonNull<Pointee> {
+impl<T, P> TryFromGlib<*const P> for ptr::NonNull<T>
+where
+    *mut T: FromGlib<*const P>,
+{
     type Error = GlibNoneError;
 
-    unsafe fn try_from_glib(val: ffi::gconstpointer) -> Result<Self, Self::Error> {
-        ptr::NonNull::new(val as ffi::gpointer).ok_or(GlibNoneError)
+    unsafe fn try_from_glib(val: *const P) -> Result<Self, Self::Error> {
+        ptr::NonNull::new(from_glib(val)).ok_or(GlibNoneError)
     }
 }
 
-impl FromGlib<ptr::NonNull<Pointee>> for Pointer {
+impl<T> FromGlib<ptr::NonNull<T>> for *mut T
+where
+    *mut T: FromGlib<ffi::gpointer>,
+{
     #[inline]
-    unsafe fn from_glib(val: ptr::NonNull<Pointee>) -> Self {
-        val.as_ptr()
+    unsafe fn from_glib(val: ptr::NonNull<T>) -> Self {
+        from_glib(val.as_ptr() as ffi::gpointer)
     }
 }
 
-impl FromGlib<Option<ptr::NonNull<Pointee>>> for Pointer {
+impl<T> FromGlib<Option<ptr::NonNull<T>>> for *mut T {
     #[inline]
-    unsafe fn from_glib(val: Option<ptr::NonNull<Pointee>>) -> Self {
+    unsafe fn from_glib(val: Option<ptr::NonNull<T>>) -> Self {
         val.map(|p| p.as_ptr()).unwrap_or(ptr::null_mut())
     }
 }
@@ -2409,6 +2427,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+    use crate::types::Pointee;
     use crate::GString;
     use std::collections::HashMap;
     use std::ptr::NonNull;
